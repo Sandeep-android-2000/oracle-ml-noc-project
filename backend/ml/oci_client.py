@@ -19,10 +19,13 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
 import requests
+from dotenv import load_dotenv
 
 logger = logging.getLogger("ml.oci_client")
 
 ROOT = Path(__file__).resolve().parents[1]
+# Ensure .env is loaded even if we're imported before server.py calls load_dotenv.
+load_dotenv(ROOT / ".env")
 EXCEL_FALLBACK = ROOT / "data_store" / "raw" / "noc_incidents.xlsx"
 
 
