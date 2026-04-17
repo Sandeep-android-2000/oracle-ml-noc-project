@@ -305,6 +305,7 @@ const HEAD = [
   "Last Updated (min)",
   "Queue Name",
   "Zoom Call Prediction",
+  "LLM Explanation",
 ];
 
 const pctColour = (p) => {
@@ -344,7 +345,64 @@ const ZoomCell = ({ prediction, onClick }) => {
   );
 };
 
-const IncidentRow = ({ row, onOpen }) => {
+const ExplanationCell = ({ alias, explanation, onUpdated }) => {
+  const [loading, setLoading] = useState(false);
+  const [local, setLocal] = useState(explanation);
+
+  useEffect(() => {
+    setLocal(explanation);
+  }, [explanation, alias]);
+
+  const fetchExplain = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await axios.post(`${API}/explain/${alias}`);
+      setLocal(r.data);
+      onUpdated && onUpdated(alias, r.data);
+    } catch (e) {
+      console.error("explain failed", e);
+      setLocal({
+        text: "LLM call failed — try again.",
+        model: "error",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [alias, onUpdated]);
+
+  if (local && local.text) {
+    return (
+      <div
+        data-testid={`llm-explanation-${alias}`}
+        className="text-[11px] leading-snug text-slate-700 max-w-[280px]"
+        title={local.text}
+      >
+        <span className="line-clamp-3">{local.text}</span>
+        <div className="text-[9px] text-slate-400 mt-0.5 truncate">
+          {local.model}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <button
+      data-testid={`explain-btn-${alias}`}
+      onClick={fetchExplain}
+      disabled={loading}
+      className={cls(
+        "inline-flex items-center gap-1 px-2 py-1 rounded border text-[11px]",
+        loading
+          ? "border-slate-200 bg-slate-100 text-slate-400 cursor-wait"
+          : "border-slate-300 bg-white hover:border-rose-400 hover:text-rose-600"
+      )}
+    >
+      <span>{loading ? "…" : "✨"}</span>
+      <span>{loading ? "Thinking" : "Explain"}</span>
+    </button>
+  );
+};
+
+const IncidentRow = ({ row, onOpen, onExplanationUpdated }) => {
   const p = row.prediction;
   return (
     <tr
@@ -425,13 +483,20 @@ const IncidentRow = ({ row, onOpen }) => {
       <td className="px-3 py-[7px]">
         <ZoomCell prediction={p} onClick={() => onOpen(row)} />
       </td>
+      <td className="px-3 py-[7px] align-top">
+        <ExplanationCell
+          alias={row.alias}
+          explanation={row.explanation}
+          onUpdated={onExplanationUpdated}
+        />
+      </td>
     </tr>
   );
 };
 
-const IncidentsTable = ({ rows, onOpen }) => (
+const IncidentsTable = ({ rows, onOpen, onExplanationUpdated }) => (
   <div className="border-b border-slate-200 overflow-x-auto">
-    <table className="w-full text-[12px] min-w-[1600px]" data-testid="incidents-table">
+    <table className="w-full text-[12px] min-w-[1820px]" data-testid="incidents-table">
       <thead className="bg-slate-50 text-slate-500">
         <tr>
           {HEAD.map((h, i) => (
@@ -448,7 +513,12 @@ const IncidentsTable = ({ rows, onOpen }) => (
       </thead>
       <tbody>
         {rows.map((r) => (
-          <IncidentRow key={r.alias} row={r} onOpen={onOpen} />
+          <IncidentRow
+            key={r.alias}
+            row={r}
+            onOpen={onOpen}
+            onExplanationUpdated={onExplanationUpdated}
+          />
         ))}
         {rows.length === 0 && (
           <tr>
@@ -1086,6 +1156,12 @@ function App() {
     }
   }, [refresh]);
 
+  const handleExplanationUpdated = useCallback((alias, explanation) => {
+    setRows((prev) =>
+      prev.map((r) => (r.alias === alias ? { ...r, explanation } : r))
+    );
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900" data-testid="app-root">
       <TopBar />
@@ -1111,7 +1187,11 @@ function App() {
               setPage(1);
             }}
           />
-          <IncidentsTable rows={rows} onOpen={setSelected} />
+          <IncidentsTable
+            rows={rows}
+            onOpen={setSelected}
+            onExplanationUpdated={handleExplanationUpdated}
+          />
           <Pagination
             page={page}
             pageSize={pageSize}

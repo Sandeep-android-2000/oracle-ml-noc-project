@@ -1,0 +1,65 @@
+{
+  "summary": "Completed testing of NEW LLM Explanation feature. All 12 backend tests passed (100%). Frontend tests passed: LLM Explanation column visible (21 total columns), Explain button works, cached explanations persist after refresh, model label 'claude-haiku-4-5-20251001' displays correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_llm_explain.py",
+    "/app/test_reports/pytest/pytest_llm_explain_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_llm_explain.py"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 tests passed)",
+    "frontend": "100% (all LLM Explanation features working)"
+  },
+  "seed_data_creation": "None - used existing 500 seeded incidents (from previous test run)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "LLM Explanation feature fully tested. Backend endpoints: POST /api/explain/{alias} (compute/cache), POST /api/explain/{alias}?force=true (regenerate), GET /api/explain/{alias} (cache-only). Frontend: 'LLM Explanation' is 21st column in NOC Incidents table, uncached rows show '✨ Explain' button (data-testid='explain-btn-{alias}'), cached rows show explanation text with model label (data-testid='llm-explanation-{alias}'). Claude Haiku 4.5 (claude-haiku-4-5-20251001) is LIVE via Emergent LLM key - not mocked. LLM calls take 2-5s, cache hits are instant.",
+  "test_details": {
+    "backend_tests": {
+      "TestExplainPostEndpoint": {
+        "test_explain_post_valid_alias_returns_200_with_schema": "PASSED - returns alias, text (non-empty), model='claude-haiku-4-5-20251001', decision, probability, ts",
+        "test_explain_post_returns_cached_on_second_call": "PASSED - same ts on second call (cache hit)",
+        "test_explain_post_force_regenerates": "PASSED - newer ts with ?force=true",
+        "test_explain_post_invalid_alias_returns_404": "PASSED - 'incident not found'"
+      },
+      "TestExplainGetEndpoint": {
+        "test_explain_get_cached_returns_200": "PASSED - returns cached doc",
+        "test_explain_get_uncached_returns_404": "PASSED - 'no cached explanation'"
+      },
+      "TestIncidentsExplanationField": {
+        "test_incidents_rows_have_explanation_key": "PASSED - all rows have 'explanation' key (null or object)",
+        "test_incidents_cached_explanation_has_correct_schema": "PASSED - text/model fields present"
+      },
+      "TestRegressionCoreEndpoints": {
+        "test_health_still_works": "PASSED",
+        "test_kpis_still_works": "PASSED",
+        "test_incidents_still_works": "PASSED",
+        "test_model_still_works": "PASSED"
+      }
+    },
+    "frontend_tests": {
+      "LLM Explanation Column Header": "PASSED - 'LLM Explanation' is 21st (last) column in NOC Incidents table",
+      "Explain Button Rendering": "PASSED - 22 uncached rows show '✨ Explain' button with data-testid='explain-btn-NOC-{alias}'",
+      "Explain Button Click": "PASSED - clicked button for NOC-5000078, LLM response appeared within 20s",
+      "Explanation Text Display": "PASSED - explanation text rendered in div with data-testid='llm-explanation-NOC-{alias}'",
+      "Model Label Display": "PASSED - 'claude-haiku-4-5-20251001' shown below explanation text",
+      "Cache Persistence": "PASSED - after page refresh, cached explanations persist (5 cached after testing)"
+    }
+  },
+  "mocked_apis": {
+    "Claude Haiku 4.5": "LIVE via Emergent LLM key (not mocked)",
+    "OCI Iris IncidentAPI": "Remains in mock mode (unchanged from previous iterations)"
+  }
+}

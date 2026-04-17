@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.cors import CORSMiddleware
 
 from ml.inference import ENGINE
+from ml.llm_explain import MODEL as LLM_MODEL, explain_prediction
 from ml.oci_client import CLIENT as OCI_CLIENT
 from ml.synthetic import generate_incidents
 from ml.train import train as train_model
@@ -50,6 +51,7 @@ db = client[DB_NAME]
 INCIDENTS = db.incidents
 PREDICTIONS = db.predictions
 RUNS = db.training_runs
+EXPLANATIONS = db.explanations
 
 app = FastAPI(title="NOC Zoom-Call Prediction API", version="1.0.0")
 api = APIRouter(prefix="/api")
@@ -272,6 +274,10 @@ async def list_incidents(
     pred_map: Dict[str, Dict[str, Any]] = {}
     async for p in PREDICTIONS.find({"alias": {"$in": aliases}}, {"_id": 0}):
         pred_map[p["alias"]] = p
+    # Join cached explanations
+    exp_map: Dict[str, Dict[str, Any]] = {}
+    async for e in EXPLANATIONS.find({"alias": {"$in": aliases}}, {"_id": 0}):
+        exp_map[e["alias"]] = e
     # If a zoom filter is active, apply after join
     enriched = []
     for r in rows:
@@ -280,6 +286,7 @@ async def list_incidents(
             p = ENGINE.predict_many([r])[0]
             pred_map[r["alias"]] = p
         r["prediction"] = p
+        r["explanation"] = exp_map.get(r["alias"])
         enriched.append(r)
     if zoom:
         enriched = [e for e in enriched if e["prediction"]["decision"] == zoom]
@@ -295,7 +302,58 @@ async def get_incident(alias: str):
     if not pred:
         pred = ENGINE.predict_many([row])[0]
     row["prediction"] = pred
+    exp = await EXPLANATIONS.find_one({"alias": alias}, {"_id": 0})
+    if exp:
+        row["explanation"] = exp
     return row
+
+
+# ------------------------------ LLM explanations ------------------------------
+
+@api.get("/explain/{alias}")
+async def get_explanation(alias: str):
+    """Return the cached LLM explanation for an alias, or 404 if not computed."""
+    exp = await EXPLANATIONS.find_one({"alias": alias}, {"_id": 0})
+    if not exp:
+        raise HTTPException(404, "no cached explanation")
+    return exp
+
+
+@api.post("/explain/{alias}")
+async def compute_explanation(alias: str, force: bool = False):
+    """Compute (or return cached) LLM explanation for a single incident."""
+    if not force:
+        cached = await EXPLANATIONS.find_one({"alias": alias}, {"_id": 0})
+        if cached:
+            return cached
+
+    incident = await INCIDENTS.find_one({"alias": alias}, {"_id": 0})
+    if not incident:
+        raise HTTPException(404, "incident not found")
+
+    prediction = await PREDICTIONS.find_one({"alias": alias}, {"_id": 0})
+    if not prediction:
+        prediction = ENGINE.predict_many([incident])[0]
+
+    try:
+        text = await explain_prediction(incident, prediction)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("LLM explain failed for %s", alias)
+        raise HTTPException(502, f"LLM call failed: {exc}")
+
+    doc = {
+        "alias": alias,
+        "text": text,
+        "model": LLM_MODEL,
+        "decision": prediction.get("decision"),
+        "probability": prediction.get("probability"),
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+    await EXPLANATIONS.update_one({"alias": alias}, {"$set": doc}, upsert=True)
+    return doc
+
+
+# -----------------------------------------------------------------------------
 
 
 # ----------------------------- aggregation views -----------------------------
