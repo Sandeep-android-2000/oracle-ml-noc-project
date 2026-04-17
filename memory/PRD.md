@@ -71,3 +71,11 @@ Production-grade end-to-end ML system to predict, per NOC incident, whether a Zo
 - Data: `/app/backend/data_store/raw/noc_incidents.xlsx`
 - Models: `/app/backend/data_store/models/zoom_net/latest/`
 - Tests: `/app/backend/tests/test_noc_api.py`, `/app/test_reports/iteration_1.json`, `/app/test_reports/iteration_2.json`
+
+### 2026-04-17 (v1.2) — LLM Explanation column
+- Integrated **Claude Haiku 4.5** (`claude-haiku-4-5-20251001`) via `emergentintegrations` + Emergent Universal Key
+- New MongoDB collection `explanations` (cache keyed by alias)
+- Endpoints: `POST /api/explain/{alias}` (compute-or-cache, supports `?force=true`), `GET /api/explain/{alias}` (404 if miss), cached text auto-joined onto `/api/incidents` and `/api/incidents/{alias}` responses
+- Backend module: `backend/ml/llm_explain.py` with system prompt capped at 35 words / no bullets / references concrete features
+- Frontend: new last column **"LLM Explanation"** — shows ✨ Explain button on uncached rows; on click fires POST and replaces button with a 2-3 line text snippet (tooltip = full text) + model label footer; cached rows render text immediately on next refresh
+- 12/12 backend + frontend tests passed (iteration_3.json)
