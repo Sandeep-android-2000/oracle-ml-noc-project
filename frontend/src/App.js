@@ -673,6 +673,360 @@ const DocsTab = () => {
   );
 };
 
+/* ------------------------------ View tabs ------------------------------ */
+
+const useFetch = (url) => {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    axios
+      .get(url)
+      .then((r) => alive && setData(r.data))
+      .catch((e) => alive && setErr(e));
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+  return { data, err };
+};
+
+const Section = ({ title, subtitle, children, testid }) => (
+  <div className="p-6 space-y-4" data-testid={testid}>
+    <div>
+      <div className="text-xl font-semibold text-slate-900">{title}</div>
+      {subtitle && <div className="text-sm text-slate-500">{subtitle}</div>}
+    </div>
+    {children}
+  </div>
+);
+
+const SimpleTable = ({ columns, rows, testid }) => (
+  <div className="border border-slate-200 rounded bg-white overflow-x-auto">
+    <table className="w-full text-[12px]" data-testid={testid}>
+      <thead className="bg-slate-50 text-slate-500">
+        <tr>
+          {columns.map((c) => (
+            <th
+              key={c.key}
+              className="px-3 py-2 text-left font-medium whitespace-nowrap border-b border-slate-200"
+            >
+              {c.label}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr
+            key={i}
+            className="border-b border-slate-100 hover:bg-sky-50/40"
+          >
+            {columns.map((c) => (
+              <td key={c.key} className="px-3 py-2 text-slate-800">
+                {c.render ? c.render(r) : r[c.key]}
+              </td>
+            ))}
+          </tr>
+        ))}
+        {rows.length === 0 && (
+          <tr>
+            <td
+              colSpan={columns.length}
+              className="px-6 py-10 text-center text-slate-500"
+            >
+              No data.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+);
+
+const SevPills = ({ r }) => (
+  <div className="flex gap-1">
+    {[
+      ["SEV1", "rose"],
+      ["SEV2", "amber"],
+      ["SEV3", "slate"],
+      ["SEV4", "outline"],
+    ].map(([k, tone]) => {
+      const v = r[k.toLowerCase()];
+      if (!v) return null;
+      return (
+        <Badge key={k} tone={tone}>
+          {k} · {v}
+        </Badge>
+      );
+    })}
+  </div>
+);
+
+const CustomerViewTab = () => {
+  const { data } = useFetch(`${API}/views/customer`);
+  if (!data) return <Section title="Customer View">Loading…</Section>;
+  const columns = [
+    { key: "reporter", label: "Customer / Reporter" },
+    { key: "queue", label: "Queue" },
+    { key: "total", label: "Total" },
+    { key: "open", label: "Open" },
+    { key: "sev", label: "Severity breakdown", render: (r) => <SevPills r={r} /> },
+    { key: "regions", label: "Regions" },
+    {
+      key: "zoom_yes",
+      label: "Zoom predicted Yes",
+      render: (r) => (
+        <Badge tone={r.zoom_yes > 0 ? "rose" : "green"}>
+          {r.zoom_yes}
+        </Badge>
+      ),
+    },
+  ];
+  return (
+    <Section
+      testid="customer-view-tab"
+      title="Customer View"
+      subtitle={`${data.total} customers / reporters with open workload`}
+    >
+      <SimpleTable testid="customer-view-table" columns={columns} rows={data.rows} />
+    </Section>
+  );
+};
+
+const InstanceViewTab = () => {
+  const { data } = useFetch(`${API}/views/instance`);
+  if (!data) return <Section title="Instance View">Loading…</Section>;
+  const columns = [
+    { key: "region", label: "Region / Instance" },
+    { key: "total", label: "Total" },
+    { key: "open", label: "Open" },
+    { key: "sev", label: "Severity breakdown", render: (r) => <SevPills r={r} /> },
+    { key: "multi_region", label: "Multi-region linked" },
+    {
+      key: "avg_age_min",
+      label: "Avg age (min)",
+      render: (r) => <span className="tabular-nums">{r.avg_age_min}</span>,
+    },
+    {
+      key: "zoom_yes",
+      label: "Zoom predicted Yes",
+      render: (r) => <Badge tone="rose">{r.zoom_yes}</Badge>,
+    },
+  ];
+  return (
+    <Section
+      testid="instance-view-tab"
+      title="Instance View"
+      subtitle={`${data.total} regions reporting`}
+    >
+      <SimpleTable testid="instance-view-table" columns={columns} rows={data.rows} />
+    </Section>
+  );
+};
+
+const AllEventsTab = () => {
+  const { data } = useFetch(`${API}/incidents?page=1&page_size=50`);
+  if (!data) return <Section title="All Events">Loading…</Section>;
+  return (
+    <Section
+      testid="all-events-tab"
+      title="All Events"
+      subtitle={`${data.total} events across all statuses`}
+    >
+      <IncidentsTable rows={data.rows} onOpen={() => {}} />
+    </Section>
+  );
+};
+
+const ServiceRequestsTab = () => {
+  const { data } = useFetch(`${API}/views/service-requests?page=1&page_size=50`);
+  if (!data) return <Section title="Service Requests">Loading…</Section>;
+  const columns = [
+    { key: "sr_id", label: "SR ID",
+      render: (r) => <span className="text-sky-700">{r.sr_id}</span> },
+    { key: "priority", label: "Priority",
+      render: (r) => (
+        <Badge tone={r.priority === "P3" ? "amber" : "slate"}>{r.priority}</Badge>
+      ) },
+    { key: "title", label: "Subject" },
+    { key: "region", label: "Region" },
+    { key: "reporter_name", label: "Customer" },
+    { key: "queue_name", label: "Queue" },
+    { key: "open_since_min", label: "Open (min)" },
+    { key: "status", label: "Status",
+      render: (r) => <Badge tone="slate">{r.status}</Badge> },
+  ];
+  return (
+    <Section
+      testid="service-requests-tab"
+      title="Service Requests"
+      subtitle={`${data.total} customer-impacting SR-class tickets`}
+    >
+      <SimpleTable testid="sr-table" columns={columns} rows={data.rows} />
+    </Section>
+  );
+};
+
+const BlackoutsTab = () => {
+  const { data } = useFetch(`${API}/views/blackouts`);
+  if (!data) return <Section title="Blackouts">Loading…</Section>;
+  const columns = [
+    { key: "id", label: "Blackout ID" },
+    { key: "region", label: "Region" },
+    { key: "description", label: "Description" },
+    { key: "status", label: "Status",
+      render: (r) => (
+        <Badge tone={
+          r.status === "ACTIVE" ? "red" :
+          r.status === "UPCOMING" ? "blue" : "green"
+        }>{r.status}</Badge>
+      ) },
+    { key: "window_start", label: "Starts" },
+    { key: "window_end", label: "Ends" },
+    { key: "duration_hours", label: "Duration (h)" },
+    { key: "owner", label: "Owner" },
+    { key: "impact", label: "Impact",
+      render: (r) => (
+        <Badge tone={
+          r.impact === "High" ? "rose" :
+          r.impact === "Medium" ? "amber" : "slate"
+        }>{r.impact}</Badge>
+      ) },
+  ];
+  return (
+    <Section
+      testid="blackouts-tab"
+      title="Blackouts"
+      subtitle={`${data.total} scheduled maintenance windows`}
+    >
+      <SimpleTable testid="blackouts-table" columns={columns} rows={data.rows} />
+    </Section>
+  );
+};
+
+const AlarmLensTab = () => {
+  const { data } = useFetch(`${API}/views/alarm-lens`);
+  if (!data) return <Section title="Alarm Lens">Loading…</Section>;
+  const max = Math.max(
+    1,
+    ...data.severities.flatMap((s) =>
+      data.regions.map((r) => data.matrix[s]?.[r]?.count || 0)
+    )
+  );
+  const heat = (v) => {
+    if (v === 0) return "bg-slate-50 text-slate-400";
+    const pct = v / max;
+    if (pct > 0.66) return "bg-rose-600 text-white";
+    if (pct > 0.33) return "bg-rose-400 text-white";
+    return "bg-rose-200 text-rose-900";
+  };
+  return (
+    <Section
+      testid="alarm-lens-tab"
+      title="Alarm Lens"
+      subtitle="Severity × Region heat-map — count per cell"
+    >
+      <div className="overflow-x-auto border border-slate-200 rounded bg-white">
+        <table className="w-full text-[11px]" data-testid="alarm-lens-table">
+          <thead className="bg-slate-50 text-slate-600">
+            <tr>
+              <th className="px-3 py-2 text-left font-semibold sticky left-0 bg-slate-50 border-b border-slate-200">
+                Severity / Region
+              </th>
+              {data.regions.map((r) => (
+                <th
+                  key={r}
+                  className="px-2 py-2 text-center font-semibold whitespace-nowrap border-b border-slate-200"
+                >
+                  {r}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.severities.map((s) => (
+              <tr key={s} className="border-t border-slate-100">
+                <td className="px-3 py-2 font-semibold text-slate-900 sticky left-0 bg-white">
+                  {s}
+                </td>
+                {data.regions.map((r) => {
+                  const cell = data.matrix[s]?.[r];
+                  const c = cell?.count || 0;
+                  const o = cell?.open || 0;
+                  return (
+                    <td key={r} className="p-0.5">
+                      <div
+                        className={cls(
+                          "h-12 flex flex-col items-center justify-center rounded font-semibold",
+                          heat(c)
+                        )}
+                        title={`${c} total · ${o} open`}
+                      >
+                        <span className="tabular-nums text-sm">{c}</span>
+                        {o > 0 && (
+                          <span className="text-[9px] opacity-90">
+                            {o} open
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Section>
+  );
+};
+
+const ClusterEventsTab = () => {
+  const { data } = useFetch(`${API}/views/cluster-events?page=1&page_size=50`);
+  if (!data) return <Section title="Cluster Events">Loading…</Section>;
+  const columns = [
+    { key: "alias", label: "Alias",
+      render: (r) => <span className="text-sky-700">{r.alias}</span> },
+    { key: "title", label: "Title" },
+    { key: "severity", label: "Severity",
+      render: (r) => <Badge tone={r.severity === "SEV1" ? "rose" : "amber"}>{r.severity}</Badge> },
+    { key: "region", label: "Primary region" },
+    { key: "regions_affected", label: "Regions affected",
+      render: (r) => (
+        <Badge tone="blue">{r.regions_affected} regions</Badge>
+      ) },
+    { key: "workstream_count", label: "Workstreams" },
+    { key: "page_count", label: "Pages" },
+    { key: "zoom", label: "Zoom prediction",
+      render: (r) =>
+        r.prediction ? (
+          <Badge
+            tone={
+              r.prediction.decision === "Yes"
+                ? "rose"
+                : r.prediction.decision === "No"
+                ? "green"
+                : "amber"
+            }
+          >
+            {r.prediction.decision} · {(r.prediction.probability * 100).toFixed(0)}%
+          </Badge>
+        ) : (
+          "—"
+        ) },
+  ];
+  return (
+    <Section
+      testid="cluster-events-tab"
+      title="Cluster Events"
+      subtitle={`${data.total} multi-region clustered incidents`}
+    >
+      <SimpleTable testid="cluster-events-table" columns={columns} rows={data.rows} />
+    </Section>
+  );
+};
+
 /* ------------------------------ container ------------------------------ */
 const DEFAULT_FILTERS = {
   search: "",
@@ -771,24 +1125,13 @@ function App() {
         <ModelTab model={model} onRetrain={retrain} retraining={retraining} />
       )}
       {tab === "Docs" && <DocsTab />}
-
-      {!["NOC Incidents", "Model", "Docs"].includes(tab) && (
-        <div
-          data-testid="placeholder-tab"
-          className="p-10 text-slate-500 text-center"
-        >
-          <div className="text-4xl mb-3">🛈</div>
-          <div className="text-lg font-semibold text-slate-800 mb-1">
-            {tab}
-          </div>
-          <div>
-            This tab is a visual placeholder matching the Event Manager chrome.
-            Switch to <b>NOC Incidents</b> for the Zoom-call prediction
-            workflow, <b>Model</b> for training metrics, or <b>Docs</b> for the
-            architecture.
-          </div>
-        </div>
-      )}
+      {tab === "Customer View" && <CustomerViewTab />}
+      {tab === "Instance View" && <InstanceViewTab />}
+      {tab === "All Events" && <AllEventsTab />}
+      {tab === "Service Requests" && <ServiceRequestsTab />}
+      {tab === "Blackouts" && <BlackoutsTab />}
+      {tab === "Alarm Lens" && <AlarmLensTab />}
+      {tab === "Cluster Events" && <ClusterEventsTab />}
 
       <PredictionDrawer row={selected} onClose={() => setSelected(null)} />
     </div>

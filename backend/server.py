@@ -298,6 +298,194 @@ async def get_incident(alias: str):
     return row
 
 
+# ----------------------------- aggregation views -----------------------------
+
+async def _count(q):
+    return await INCIDENTS.count_documents(q)
+
+
+@api.get("/views/customer")
+async def view_customer():
+    """Aggregated view by reporter / queue."""
+    pipeline = [
+        {"$group": {
+            "_id": {"reporter": "$reporter_name", "queue": "$queue_name"},
+            "total": {"$sum": 1},
+            "open": {"$sum": "$active_noc"},
+            "sev1": {"$sum": {"$cond": [{"$eq": ["$severity", "SEV1"]}, 1, 0]}},
+            "sev2": {"$sum": {"$cond": [{"$eq": ["$severity", "SEV2"]}, 1, 0]}},
+            "sev3": {"$sum": {"$cond": [{"$eq": ["$severity", "SEV3"]}, 1, 0]}},
+            "sev4": {"$sum": {"$cond": [{"$eq": ["$severity", "SEV4"]}, 1, 0]}},
+            "regions": {"$addToSet": "$region"},
+        }},
+        {"$project": {
+            "_id": 0,
+            "reporter": "$_id.reporter",
+            "queue": "$_id.queue",
+            "total": 1, "open": 1,
+            "sev1": 1, "sev2": 1, "sev3": 1, "sev4": 1,
+            "regions": {"$size": "$regions"},
+        }},
+        {"$sort": {"open": -1, "total": -1}},
+    ]
+    rows = await INCIDENTS.aggregate(pipeline).to_list(length=None)
+    # Join zoom-yes counts
+    zoom_pipeline = [
+        {"$lookup": {"from": "predictions", "localField": "alias",
+                     "foreignField": "alias", "as": "p"}},
+        {"$unwind": "$p"},
+        {"$match": {"p.decision": "Yes"}},
+        {"$group": {
+            "_id": {"reporter": "$reporter_name", "queue": "$queue_name"},
+            "zoom_yes": {"$sum": 1},
+        }},
+    ]
+    zoom_map: Dict[tuple, int] = {}
+    async for z in INCIDENTS.aggregate(zoom_pipeline):
+        zoom_map[(z["_id"]["reporter"], z["_id"]["queue"])] = z["zoom_yes"]
+    for r in rows:
+        r["zoom_yes"] = zoom_map.get((r["reporter"], r["queue"]), 0)
+    return {"total": len(rows), "rows": rows}
+
+
+@api.get("/views/instance")
+async def view_instance():
+    """Aggregated view by region (an "instance" ≈ regional plane)."""
+    pipeline = [
+        {"$group": {
+            "_id": "$region",
+            "total": {"$sum": 1},
+            "open": {"$sum": "$active_noc"},
+            "sev1": {"$sum": {"$cond": [{"$eq": ["$severity", "SEV1"]}, 1, 0]}},
+            "sev2": {"$sum": {"$cond": [{"$eq": ["$severity", "SEV2"]}, 1, 0]}},
+            "sev3": {"$sum": {"$cond": [{"$eq": ["$severity", "SEV3"]}, 1, 0]}},
+            "sev4": {"$sum": {"$cond": [{"$eq": ["$severity", "SEV4"]}, 1, 0]}},
+            "multi_region": {"$sum": "$multi_region"},
+            "avg_age_min": {"$avg": "$age_minutes"},
+        }},
+        {"$project": {
+            "_id": 0, "region": "$_id",
+            "total": 1, "open": 1,
+            "sev1": 1, "sev2": 1, "sev3": 1, "sev4": 1,
+            "multi_region": 1,
+            "avg_age_min": {"$round": ["$avg_age_min", 0]},
+        }},
+        {"$sort": {"open": -1}},
+    ]
+    rows = await INCIDENTS.aggregate(pipeline).to_list(length=None)
+    zoom_pipeline = [
+        {"$lookup": {"from": "predictions", "localField": "alias",
+                     "foreignField": "alias", "as": "p"}},
+        {"$unwind": "$p"},
+        {"$match": {"p.decision": "Yes"}},
+        {"$group": {"_id": "$region", "zoom_yes": {"$sum": 1}}},
+    ]
+    zoom_map: Dict[str, int] = {}
+    async for z in INCIDENTS.aggregate(zoom_pipeline):
+        zoom_map[z["_id"]] = z["zoom_yes"]
+    for r in rows:
+        r["zoom_yes"] = zoom_map.get(r["region"], 0)
+    return {"total": len(rows), "rows": rows}
+
+
+@api.get("/views/alarm-lens")
+async def view_alarm_lens():
+    """Severity × Region heat-map matrix for the alarm lens tab."""
+    pipeline = [
+        {"$group": {
+            "_id": {"sev": "$severity", "region": "$region"},
+            "count": {"$sum": 1},
+            "open": {"$sum": "$active_noc"},
+        }},
+    ]
+    matrix: Dict[str, Dict[str, Dict[str, int]]] = {}
+    regions_set: set = set()
+    async for r in INCIDENTS.aggregate(pipeline):
+        sev = r["_id"]["sev"]
+        reg = r["_id"]["region"]
+        regions_set.add(reg)
+        matrix.setdefault(sev, {})[reg] = {"count": r["count"], "open": r["open"]}
+    regions = sorted(regions_set)
+    severities = ["SEV1", "SEV2", "SEV3", "SEV4"]
+    return {
+        "regions": regions,
+        "severities": severities,
+        "matrix": matrix,
+    }
+
+
+@api.get("/views/cluster-events")
+async def view_cluster_events(page: int = Query(1, ge=1),
+                              page_size: int = Query(25, ge=1, le=200)):
+    """Multi-region clustered NOC events (multi_region==1)."""
+    q = {"multi_region": 1}
+    total = await INCIDENTS.count_documents(q)
+    rows = await (INCIDENTS.find(q, {"_id": 0})
+                  .sort("regions_affected", -1)
+                  .skip((page - 1) * page_size)
+                  .limit(page_size)
+                  .to_list(length=page_size))
+    aliases = [r["alias"] for r in rows]
+    pred_map: Dict[str, Dict] = {}
+    async for p in PREDICTIONS.find({"alias": {"$in": aliases}}, {"_id": 0}):
+        pred_map[p["alias"]] = p
+    for r in rows:
+        r["prediction"] = pred_map.get(r["alias"])
+    return {"total": total, "page": page, "page_size": page_size, "rows": rows}
+
+
+@api.get("/views/service-requests")
+async def view_service_requests(page: int = Query(1, ge=1),
+                                page_size: int = Query(25, ge=1, le=200)):
+    """Lower-severity, customer-impact incidents treated as Service Requests."""
+    q = {"severity": {"$in": ["SEV3", "SEV4"]},
+         "$or": [{"has_customer_impact": 1}, {"queue_name": "DBOps"}]}
+    total = await INCIDENTS.count_documents(q)
+    rows = await (INCIDENTS.find(q, {"_id": 0})
+                  .sort("open_since_min", 1)
+                  .skip((page - 1) * page_size)
+                  .limit(page_size)
+                  .to_list(length=page_size))
+    # Service-request-shaped projection
+    for r in rows:
+        r["sr_id"] = f"SR-{3000000 + abs(hash(r['alias'])) % 999999:06d}"
+        r["priority"] = "P3" if r["severity"] == "SEV3" else "P4"
+    return {"total": total, "page": page, "page_size": page_size, "rows": rows}
+
+
+@api.get("/views/blackouts")
+async def view_blackouts():
+    """Synthetic scheduled maintenance blackouts (until a real feed is wired)."""
+    import hashlib
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    regions = await INCIDENTS.distinct("region")
+    rows: List[Dict[str, Any]] = []
+    for idx, region in enumerate(sorted(regions)[:12]):
+        seed = int(hashlib.md5(region.encode()).hexdigest(), 16)
+        start_offset_h = (seed % 48) + 2
+        duration_h = 2 + (seed % 6)
+        start = now + timedelta(hours=start_offset_h - 24 * (idx % 3))
+        end = start + timedelta(hours=duration_h)
+        rows.append({
+            "id": f"BO-{idx + 1:04d}",
+            "region": region,
+            "description": f"Planned maintenance window for {region}",
+            "status": "ACTIVE" if start <= now <= end else
+                      ("UPCOMING" if start > now else "COMPLETED"),
+            "window_start": start.strftime("%Y-%m-%d %H:%M UTC"),
+            "window_end": end.strftime("%Y-%m-%d %H:%M UTC"),
+            "duration_hours": duration_h,
+            "owner": ["NetworkOps", "DBOps", "SRE", "COE"][seed % 4],
+            "impact": ["Low", "Medium", "High"][seed % 3],
+        })
+    rows.sort(key=lambda r: r["window_start"])
+    return {"total": len(rows), "rows": rows}
+
+
+# -----------------------------------------------------------------------------
+
+
 @api.get("/kpis")
 async def kpis():
     total_open = await INCIDENTS.count_documents({"active_noc": 1})
