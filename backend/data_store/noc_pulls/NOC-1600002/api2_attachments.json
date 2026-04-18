@@ -1,0 +1,32 @@
+{
+  "data": {
+    "items": [
+      {
+        "definedTags": null,
+        "etag": "426f5c6537bcb3b40bfa12b33844db1c91a33cd0f56785503eb8930723ac4def",
+        "freeformTags": null,
+        "id": "e0980ab7-2de4-babb-4f47-b8efb7b90336",
+        "mediaType": "text/csv",
+        "name": "noc-pull-0_AutomatedAutoComms_20260418-081831.csv",
+        "noteId": "7be15281-1384-3951-5fc5-91e7476e9d29",
+        "otsAttachmentId": "927613",
+        "otsTicketId": "IRIS-21-5805425",
+        "size": 3869,
+        "systemTags": null,
+        "uploadedAt": "2026-04-18T08:18:31.000000Z",
+        "uploadedBy": {
+          "displayName": "AUTOCOMMS",
+          "email": "jichouha_directs_ww@oracle.com",
+          "id": "ocid1.tenancy.oc1..aaaaaaaade4catkgnaurcikdecs6ng53x5jgzdpv2yalhh4fza5uxz4645xa",
+          "name": null
+        },
+        "workStreamId": "Incident"
+      }
+    ]
+  },
+  "headers": {
+    "opc-total-items": "1"
+  },
+  "status": "200 OK",
+  "_source": "synthetic"
+}

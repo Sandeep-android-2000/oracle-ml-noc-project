@@ -32,6 +32,7 @@ from starlette.middleware.cors import CORSMiddleware
 from ml.inference import ENGINE
 from ml.llm_explain import MODEL as LLM_MODEL, explain_prediction
 from ml.oci_client import CLIENT as OCI_CLIENT
+from ml.scheduler import get_scheduler
 from ml.synthetic import generate_incidents
 from ml.train import train as train_model
 
@@ -587,6 +588,51 @@ async def oci_pull(limit: int = 100):
     return {"mode": OCI_CLIENT.mode, "count": len(items), "sample": items[:5]}
 
 
+# ----------------------- Live 4-API pull loop (1 min cron) -----------------------
+
+@api.post("/live/start")
+async def live_start(interval_seconds: int = 60, reset_var: bool = False):
+    sched = get_scheduler(db)
+    return await sched.start(interval_seconds=interval_seconds, reset_var=reset_var)
+
+
+@api.post("/live/stop")
+async def live_stop():
+    sched = get_scheduler(db)
+    return await sched.stop()
+
+
+@api.get("/live/status")
+async def live_status():
+    sched = get_scheduler(db)
+    return sched.status()
+
+
+@api.post("/live/tick")
+async def live_tick_once():
+    """Trigger exactly one pull cycle (useful for testing without waiting)."""
+    sched = get_scheduler(db)
+    return await sched.tick_once()
+
+
+@api.get("/live/folders/{alias}")
+async def live_folder(alias: str):
+    """Return the on-disk paths of the per-NOC folder (4 API JSON files)."""
+    from pathlib import Path as _P
+    root = _P(ROOT_DIR) / "data_store" / "noc_pulls" / alias
+    if not root.exists():
+        raise HTTPException(404, "no pull folder for this alias")
+    return {"alias": alias, "folder": str(root),
+            "files": sorted(p.name for p in root.iterdir())}
+
+
+@api.get("/live/ticks")
+async def live_ticks(limit: int = Query(20, ge=1, le=200)):
+    """Return last N scheduler ticks (for the UI's live status panel)."""
+    ticks = await db.live_ticks.find({}, {"_id": 0}).sort("ts", -1).limit(limit).to_list(length=limit)
+    return {"count": len(ticks), "ticks": ticks}
+
+
 @api.get("/docs/architecture", response_class=PlainTextResponse)
 async def get_architecture():
     if not ARCH_DOC_PATH.exists():
@@ -632,7 +678,14 @@ async def on_startup():
         await RUNS.insert_one({**tr.__dict__,
                                "ts": datetime.now(timezone.utc).isoformat()})
 
+    # Kick off the 1-minute live pull loop (API-1 → API-4 chain)
+    sched = get_scheduler(db)
+    await sched.start(interval_seconds=60, reset_var=False)
+    logger.info("Live scheduler started: tick every 60 s")
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    sched = get_scheduler(db)
+    await sched.stop()
     client.close()

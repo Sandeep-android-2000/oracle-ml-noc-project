@@ -304,8 +304,9 @@ const HEAD = [
   "Region",
   "Last Updated (min)",
   "Queue Name",
-  "Zoom Call Prediction",
-  "LLM Explanation",
+  "Meeting Probability",
+  "LLM Description",
+  "Zoom Link",
 ];
 
 const pctColour = (p) => {
@@ -490,13 +491,35 @@ const IncidentRow = ({ row, onOpen, onExplanationUpdated }) => {
           onUpdated={onExplanationUpdated}
         />
       </td>
+      <td className="px-3 py-[7px]">
+        {row.zoom_link ? (
+          <a
+            data-testid={`zoom-link-${row.alias}`}
+            href={row.zoom_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cls(
+              "inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold",
+              p && p.probability >= 0.9
+                ? "bg-rose-600 text-white hover:bg-rose-700"
+                : "bg-sky-600 text-white hover:bg-sky-700"
+            )}
+            title={row.zoom_link}
+          >
+            <span>📹</span>
+            <span>{p && p.probability >= 0.9 ? "Join Now" : "Join"}</span>
+          </a>
+        ) : (
+          <span className="text-slate-400 text-[11px]">—</span>
+        )}
+      </td>
     </tr>
   );
 };
 
 const IncidentsTable = ({ rows, onOpen, onExplanationUpdated }) => (
   <div className="border-b border-slate-200 overflow-x-auto">
-    <table className="w-full text-[12px] min-w-[1820px]" data-testid="incidents-table">
+    <table className="w-full text-[12px] min-w-[2020px]" data-testid="incidents-table">
       <thead className="bg-slate-50 text-slate-500">
         <tr>
           {HEAD.map((h, i) => (
@@ -738,6 +761,106 @@ const DocsTab = () => {
         <pre className="p-6 whitespace-pre-wrap text-[12.5px] leading-6 font-mono text-slate-800">
           {text}
         </pre>
+      </div>
+    </div>
+  );
+};
+
+/* ------------------------------ live status bar ------------------------------ */
+const LiveStatusBar = ({ onTick }) => {
+  const [status, setStatus] = useState(null);
+  const [ticking, setTicking] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const r = await axios.get(`${API}/live/status`);
+      setStatus(r.data);
+    } catch (e) {
+      console.error("live/status failed", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const id = setInterval(refresh, 10000);
+    return () => clearInterval(id);
+  }, [refresh]);
+
+  const tick = async () => {
+    setTicking(true);
+    try {
+      await axios.post(`${API}/live/tick`);
+      await refresh();
+      onTick && onTick();
+    } finally {
+      setTicking(false);
+    }
+  };
+  const toggle = async () => {
+    if (!status) return;
+    const ep = status.running ? "stop" : "start";
+    await axios.post(`${API}/live/${ep}`);
+    await refresh();
+  };
+
+  if (!status) return null;
+  const lastTs = status.last_tick_ts
+    ? new Date(status.last_tick_ts).toLocaleTimeString()
+    : "never";
+  const lastItems = status.last_tick?.items || [];
+  return (
+    <div
+      data-testid="live-status-bar"
+      className="px-6 py-2 bg-slate-900 text-slate-100 flex items-center gap-4 text-[12px] border-b border-slate-700"
+    >
+      <span
+        className={cls(
+          "flex items-center gap-1.5 font-semibold",
+          status.running ? "text-emerald-400" : "text-rose-400"
+        )}
+      >
+        <span
+          className={cls(
+            "h-2 w-2 rounded-full",
+            status.running ? "bg-emerald-400 animate-pulse" : "bg-rose-400"
+          )}
+        />
+        {status.running ? "LIVE" : "PAUSED"}
+      </span>
+      <span className="text-slate-300">
+        var=<span className="text-white font-semibold tabular-nums">{status.current_var}</span>
+      </span>
+      <span className="text-slate-300">
+        interval=<span className="text-white tabular-nums">{status.interval_seconds}s</span>
+      </span>
+      <span className="text-slate-300">
+        retrain every=<span className="text-white tabular-nums">{status.retrain_every_n_ticks} ticks</span>
+      </span>
+      <span className="text-slate-300">last tick: <span className="text-white">{lastTs}</span></span>
+      {lastItems.length > 0 && (
+        <span className="text-slate-400 truncate max-w-[520px]">
+          last: {lastItems.map((i) => `${i.alias}(${i.decision || "-"},${Math.round((i.probability || 0) * 100)}%)`).join(" • ")}
+        </span>
+      )}
+      <div className="ml-auto flex gap-2">
+        <button
+          data-testid="live-tick-btn"
+          onClick={tick}
+          disabled={ticking}
+          className="px-2 py-1 rounded bg-sky-600 hover:bg-sky-700 disabled:bg-slate-600 text-white text-[11px] font-semibold"
+        >
+          {ticking ? "Ticking…" : "Tick now"}
+        </button>
+        <button
+          data-testid="live-toggle-btn"
+          onClick={toggle}
+          className={cls(
+            "px-2 py-1 rounded text-[11px] font-semibold text-white",
+            status.running ? "bg-rose-600 hover:bg-rose-700" : "bg-emerald-600 hover:bg-emerald-700"
+          )}
+        >
+          {status.running ? "Stop" : "Start"}
+        </button>
       </div>
     </div>
   );
@@ -1146,6 +1269,15 @@ function App() {
     refresh();
   }, [refresh]);
 
+  // Poll for new rows every 15s while on NOC Incidents (the live loop ticks every 60s)
+  useEffect(() => {
+    if (tab !== "NOC Incidents") return undefined;
+    const id = setInterval(() => {
+      refresh();
+    }, 15000);
+    return () => clearInterval(id);
+  }, [tab, refresh]);
+
   const retrain = useCallback(async () => {
     setRetraining(true);
     try {
@@ -1171,6 +1303,7 @@ function App() {
 
       {tab === "NOC Incidents" && (
         <>
+          <LiveStatusBar onTick={refresh} />
           <KpiRow kpis={kpis} />
           <ActionsBar
             total={total}

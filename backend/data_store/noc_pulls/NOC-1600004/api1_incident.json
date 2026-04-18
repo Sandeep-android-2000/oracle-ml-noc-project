@@ -1,0 +1,37 @@
+{
+  "data": {
+    "items": [
+      {
+        "alias": "NOC-1600004",
+        "commander": {
+          "displayName": "James George",
+          "email": "james.george@oracle.com",
+          "id": "36ec7f8c-e29c-5a29-cec6-e887b652714d",
+          "name": "james.george"
+        },
+        "createdAt": "2026-04-16T19:49:33.000000Z",
+        "definedTags": null,
+        "displayName": "TESTING - A large number of PACT probes are failing in uk-london-1",
+        "freeformTags": null,
+        "id": "94711ed2-c0d5-46e3-5854-33df42694483",
+        "labels": {
+          "items": [
+            "tosim-apac-created",
+            "sync_noc_ticket",
+            "pact_created_sev3_event"
+          ]
+        },
+        "projectKey": "NOC",
+        "regions": [
+          "uk-london-1"
+        ],
+        "severity": "SEV3",
+        "status": "INVESTIGATING",
+        "systemTags": null,
+        "ticket": null,
+        "updatedAt": "2026-04-18T08:19:33.000000Z"
+      }
+    ]
+  },
+  "_source": "synthetic"
+}

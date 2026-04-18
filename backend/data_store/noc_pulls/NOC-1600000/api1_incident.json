@@ -1,0 +1,37 @@
+{
+  "data": {
+    "items": [
+      {
+        "alias": "NOC-1600000",
+        "commander": {
+          "displayName": "Murat Mukhtarov",
+          "email": "murat.mukhtarov@oracle.com",
+          "id": "72e7cf07-0b25-937f-5ba4-8c506632e6b9",
+          "name": "murat.mukhtarov"
+        },
+        "createdAt": "2026-04-16T17:17:27.000000Z",
+        "definedTags": null,
+        "displayName": "TESTING - A large number of PACT probes are failing in ap-melbourne-1",
+        "freeformTags": null,
+        "id": "ef172d60-a1f5-e4c4-79c4-0d13c685fe73",
+        "labels": {
+          "items": [
+            "tosim-apac-created",
+            "sync_noc_ticket",
+            "pact_created_sev2_event"
+          ]
+        },
+        "projectKey": "NOC",
+        "regions": [
+          "ap-melbourne-1"
+        ],
+        "severity": "SEV2",
+        "status": "INVESTIGATING",
+        "systemTags": null,
+        "ticket": null,
+        "updatedAt": "2026-04-18T08:18:27.000000Z"
+      }
+    ]
+  },
+  "_source": "synthetic"
+}

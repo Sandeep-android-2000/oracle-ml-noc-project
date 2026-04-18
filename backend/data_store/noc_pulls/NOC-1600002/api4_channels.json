@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "id": "slackMain",
+      "displayName": "Slack",
+      "description": "Incident slack channel for NOC-1600002",
+      "incidentId": "0167e81d-2922-97bb-32ed-e517d4c0aacb",
+      "workStreamId": "Incident",
+      "communicationChannelType": "SLACK",
+      "communicationChannelDetails": {
+        "linkToJoin": "https://oracle.enterprise.slack.com/archives/noc1600002",
+        "data": "{\"type\": \"COMMUNICATION_SLACK\"}"
+      }
+    },
+    {
+      "id": "zoomMain",
+      "displayName": "Zoom",
+      "description": "Zoom bridge for those Paged to respond to this Incident.",
+      "incidentId": "0167e81d-2922-97bb-32ed-e517d4c0aacb",
+      "workStreamId": "Incident",
+      "communicationChannelType": "ZOOM",
+      "communicationChannelDetails": {
+        "linkToJoin": "https://oracle.zoom.us/j/79857408711?pwd=7db6960892b4d92bff6170",
+        "data": "{\"type\": \"COMMUNICATION_ZOOM\", \"linkToJoin\": \"https://oracle.zoom.us/j/79857408711?pwd=7db6960892b4d92bff6170\", \"meetingId\": \"79857408711\"}"
+      }
+    }
+  ],
+  "_source": "synthetic"
+}

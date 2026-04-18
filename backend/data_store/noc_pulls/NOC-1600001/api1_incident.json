@@ -1,0 +1,37 @@
+{
+  "data": {
+    "items": [
+      {
+        "alias": "NOC-1600001",
+        "commander": {
+          "displayName": "Frank Jantunen",
+          "email": "frank.jantunen@oracle.com",
+          "id": "53ac43da-2439-840e-f689-349e29bc6da4",
+          "name": "frank.jantunen"
+        },
+        "createdAt": "2026-04-17T08:46:29.000000Z",
+        "definedTags": null,
+        "displayName": "TESTING - A large number of PACT probes are failing in ap-sydney-1",
+        "freeformTags": null,
+        "id": "f5420b92-552a-af20-b5f3-c043c4a9008b",
+        "labels": {
+          "items": [
+            "tosim-apac-created",
+            "sync_noc_ticket",
+            "pact_created_sev3_event"
+          ]
+        },
+        "projectKey": "NOC",
+        "regions": [
+          "ap-sydney-1"
+        ],
+        "severity": "SEV3",
+        "status": "RESOLVED",
+        "systemTags": null,
+        "ticket": null,
+        "updatedAt": "2026-04-18T08:18:29.000000Z"
+      }
+    ]
+  },
+  "_source": "synthetic"
+}
